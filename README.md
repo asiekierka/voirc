@@ -20,3 +20,4 @@ The code is terrible. Sorry. It might get better.
 
 1. Run "make".
 2. Run "./voirc [IRC server](:port) [nickname] '[#channel]'.
+3. Press F12 to toggle voice transmission!
