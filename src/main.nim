@@ -215,11 +215,11 @@ proc processKeypresses() {.async.} =
         showMsg("\n[" & currChannel & "] <" & currNickname & "> " & msgBuf)
         msgBuf = ""
         werase(wfield)
-    elif c >= 32 and c <= 127:
+    elif c >= 32 and c < 127:
       add(msgBuf, char(c))
       waddstr(wfield, $char(c))
       wrefresh(wfield)
-    elif c == 263:
+    elif c == 263 or c == 127:
       if msgBuf.len > 0:
         msgBuf = msgBuf[0..(msgBuf.high-1)]
         var cx, cy: int
