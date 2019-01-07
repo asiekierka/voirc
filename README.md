@@ -21,3 +21,8 @@ The code is terrible. Sorry. It might get better.
 1. Run "make".
 2. Run "./voirc [IRC server](:port) [nickname] '[#channel]'.
 3. Press F12 to toggle voice transmission!
+
+## Contributing
+
+As the registration system on my Gitea instance doesn't currently quite work, just send the patches 
+via e-mail... if you really want to.
