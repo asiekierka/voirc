@@ -192,7 +192,7 @@ proc ircCallback(client: AsyncIrc, event: IrcEvent) {.async.} =
     else:
       showMsg("\n" & event.raw)
 
-var scrw, scrh: int
+var scrw, scrh: cint
 var lastw = 0
 var lasth = 0
 
@@ -222,7 +222,7 @@ proc processKeypresses() {.async.} =
     elif c == 263 or c == 127:
       if msgBuf.len > 0:
         msgBuf = msgBuf[0..(msgBuf.high-1)]
-        var cx, cy: int
+        var cx, cy: cint
         getyx(wfield, cy, cx)
         if cx >= 1:
           cx -= 1
