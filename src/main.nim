@@ -11,13 +11,13 @@ import sequtils
 import strutils
 import times
 
-const BITS_PER_SECOND = 1200
+const BITS_PER_SECOND = 2400
 const BITS_PER_MESSAGE = 2496
 # BITS_PER_MESSAGE / 8
 const BYTES_PER_MESSAGE = 312
 const SAMPLE_RATE = 8000
 # SAMPLE_RATE * BITS_PER_MESSAGE / BITS_PER_SECOND
-const BUFFER_SIZE = 16640
+const BUFFER_SIZE = int(16640 / 2)
 
 type
   ReceivedAudio = ref object of RootObj
@@ -62,6 +62,9 @@ keypad(stdscr, true)
 let codec = codec2Create(CODEC2_MODE_1200)
 let samplesPerFrame = codec2_samples_per_frame(codec)
 let bytesPerFrame = (codec2_bits_per_frame(codec) + 7) div 8
+let codecHq = codec2Create(CODEC2_MODE_2400)
+let samplesPerFrameHq = codec2_samples_per_frame(codecHq)
+let bytesPerFrameHq = (codec2_bits_per_frame(codecHq) + 7) div 8
 
 proc showMsg(msg: string) =
   waddstr(wtext, cstring(msg))
@@ -124,6 +127,31 @@ proc decodeFrame(sender: string, msg: string): bool =
     updateStatusbar()
   return true
 
+proc decodeFrameHq(sender: string, msg: string): bool =
+  if msg.len < 8:
+    return false
+  let msgHeader = msg[0..7]
+  let msgHeaderLower = toLower(msgHeader)
+  if msgHeaderLower != "voirc02]":
+    return false
+  let msgEnc = msg[8..<msg.len]
+  let msgKey = msgHeader & sender
+  var msgDec = message.decode(msgEnc)
+  var outBuf: array[SAMPLE_RATE, cshort]
+  var frameHolder = findAudioTracker(msgKey)
+  var inPos = 0
+  var changed = frameHolder.frames.len == 0
+  while inPos < msgDec.len:
+    codec2_decode(codecHq, cast[ptr cshort](outBuf[0].addr), cast[ptr cuchar](msgDec[inPos].addr))
+    acquire(audioTrackerModifyLock)
+    for i in 0..<samplesPerFrameHq:
+      add(frameHolder.frames, int16(outBuf[i]))
+    release(audioTrackerModifyLock)
+    inPos += bytesPerFrameHq
+  if changed:
+    updateStatusbar()
+  return true
+
 proc writeCallback(fcMin: int, fcMax: int): seq[int16] =
   var outSeq = newSeq[int16](0)
   if fcMax < 1:
@@ -159,14 +187,14 @@ proc sendFrame(audioBuffer: var seq[int16]) =
   var outPos = 0
   var framePos = 0
   while framePos < maxFramePos:
-    codec2_encode(codec, cast[ptr cuchar](output[outPos].addr), cast[ptr cshort](frame[framePos].addr))
-    framePos += samplesPerFrame
-    outPos += bytesPerFrame
+    codec2_encode(codecHq, cast[ptr cuchar](output[outPos].addr), cast[ptr cshort](frame[framePos].addr))
+    framePos += samplesPerFrameHq
+    outPos += bytesPerFrameHq
   var msgCntStr = ""
   add(msgCntStr, if (msgCnt and 4) != 0: 'I' else: 'i')
   add(msgCntStr, if (msgCnt and 2) != 0: 'R' else: 'r')
   add(msgCntStr, if (msgCnt and 1) != 0: 'C' else: 'c')
-  var msg = "Vo" & msgCntStr & "01]" & message.encode(output, outPos)
+  var msg = "Vo" & msgCntStr & "02]" & message.encode(output, outPos)
   var pmFuture = client.privmsg(currChannel, msg)
 
 proc readCallback(audioBuffer: var seq[int16]) =
@@ -186,7 +214,8 @@ proc ircCallback(client: AsyncIrc, event: IrcEvent) {.async.} =
   of EvMsg:
     if event.cmd == MPrivMsg:
       if not decodeFrame(event.nick, event.params[event.params.high]):
-        showMsg("\n[" & event.origin & "] <" & event.nick & "> " & event.params[event.params.high])
+        if not decodeFrameHq(event.nick, event.params[event.params.high]):
+          showMsg("\n[" & event.origin & "] <" & event.nick & "> " & event.params[event.params.high])
     elif event.cmd == MPong:
       return
     else:
